@@ -1,0 +1,39 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Python version managers
+.python-version
+.tool-versions
+
+# Build / dist / eggs
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Output directories
+output_books/
+
+# Exported / downloaded source data
+*.json
+*.txt
+*.epub
+*.fb2
+*.html
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~

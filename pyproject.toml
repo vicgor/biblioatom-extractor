@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "biblioatom-extractor"
+version = "0.1.0"
+description = "Convert BiblioAtom JSON exports to chapter-based HTML, FB2, and EPUB"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Victor Goryachko", email = "vicgor@gmail.com" }
+]
+requires-python = ">=3.9"
+dependencies = []     # stdlib only: argparse, json, re, html, zipfile, xml.etree
+
+[project.scripts]
+convert-book = "convert_book:main"
+
+[project.urls]
+Repository = "https://github.com/vicgor/biblioatom-extractor"
