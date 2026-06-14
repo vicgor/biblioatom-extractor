@@ -19,14 +19,18 @@ FRONT_MATTER_TITLES = {
     "РОССИЙСКАЯ АКАДЕМИЯ НАУК",
     "ПЕТР ЛЕОНИДОВИЧ КАПИЦА",
     "ВОСПОМИНАНИЯ ПИСЬМА ДОКУМЕНТЫ",
-    "МОСКВА “НАУКА” 1994",
-    "МОСКВА \"НАУКА\" 1994",
-    "СЕРИЯ “УЧЕНЫЕ РОССИИ. ОЧЕРКИ. ВОСПОМИНАНИЯ. МАТЕРИАЛЫ”",
-    "СЕРИЯ \"УЧЕНЫЕ РОССИИ. ОЧЕРКИ. ВОСПОМИНАНИЯ. МАТЕРИАЛЫ\"",
+    'МОСКВА "НАУКА" 1994',
+    'СЕРИЯ "УЧЕНЫЕ РОССИИ. ОЧЕРКИ. ВОСПОМИНАНИЯ. МАТЕРИАЛЫ"',
     "РЕДАКЦИОННАЯ КОЛЛЕГИЯ СЕРИИ:",
 }
 
 STRICT_MIN_PAGE_FOR_CHAPTER = 5
+
+# Regex matching only <p> tags (not <div>) to avoid mis-matching nested divs.
+_P_TAG_RE = re.compile(
+    r"<p(?P<attrs>[^>]*)>(?P<body>.*?)</p>",
+    re.I | re.S,
+)
 
 
 def parse_args():
@@ -97,18 +101,18 @@ def strip_tags_preserve_text(s):
 
 
 def extract_blocks_from_html(pagehtml, fallback_text=""):
+    """Extract text blocks from pagehtml.
+
+    Uses a <p>-only regex to avoid incorrectly matching nested <div> tags
+    (e.g. the outer comp-draft wrapper that contains multiple <p> children).
+    The comp-draft <div> itself carries no text of its own and is skipped.
+    """
     blocks = []
 
     if pagehtml:
-        pattern = re.compile(
-            r"<p(?P<attrs>[^>]*)>(?P<body>.*?)</p>|<div(?P<dattrs>[^>]*)>(?P<dbody>.*?)</div>",
-            re.I | re.S
-        )
-
-        for m in pattern.finditer(pagehtml):
-            attrs = m.group("attrs") or m.group("dattrs") or ""
-            body = m.group("body") if m.group("body") is not None else m.group("dbody")
-            body = body or ""
+        for m in _P_TAG_RE.finditer(pagehtml):
+            attrs = m.group("attrs") or ""
+            body = m.group("body") or ""
 
             class_match = re.search(r'class=["\']([^"\']+)["\']', attrs, re.I)
             classes = class_match.group(1).split() if class_match else []
@@ -117,16 +121,16 @@ def extract_blocks_from_html(pagehtml, fallback_text=""):
             if not text:
                 continue
 
+            # Skip printed page-number markers entirely.
             if "page-no" in classes:
-                continue  # полностью выкидываем печатный номер страницы
+                continue
 
             if "ftn" in classes:
                 blocks.append({"type": "footnote", "text": text})
             elif "img" in classes:
                 blocks.append({"type": "image-caption", "text": text})
-            elif "text" in classes:
-                blocks.append({"type": "p", "text": text})
             else:
+                # covers class="text", class="text t0", and any unknown class
                 blocks.append({"type": "p", "text": text})
 
     if not blocks and fallback_text:
@@ -164,7 +168,7 @@ def slugify(text):
     s = re.sub(r"[^\w\s.-]", "", s, flags=re.U)
     s = re.sub(r"\s+", "_", s)
     s = re.sub(r"_+", "_", s)
-    return s.strip("_")[:120] or "book"
+    return s[:120].strip("_") or "book"
 
 
 def output_stem(src, input_path, prefix=""):
@@ -235,7 +239,7 @@ def is_probable_author_line(text):
     if len(words) > 6:
         return False
 
-    initials = sum(1 for w in words if re.match(r"^[А-ЯA-Z]\.?[А-ЯA-Z]?\.$", w))
+    initials = sum(1 for w in words if re.match(r"^[А-ЯA-Z]\.?[А-ЯA-Z]?\.$ ", w))
     surname_like = any(re.match(r"^[А-ЯA-ZЁ][а-яa-zё-]+$", w) for w in words)
 
     return initials >= 1 and surname_like
@@ -313,6 +317,8 @@ def split_into_chapters(pages, mode="strict"):
                 i += 1
                 continue
 
+            pending_author = ""
+
             if pg["page"] not in current["pages"]:
                 current["pages"].append(pg["page"])
 
@@ -342,6 +348,58 @@ def merge_empty_front_matter(chapters):
     return cleaned
 
 
+_HTML_STYLE = """
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f5f5f5;
+      color: #111;
+      font: 18px/1.65 Georgia, "Times New Roman", serif;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header, nav.toc, section.chapter {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    .meta, .chapter-meta {
+      color: #666;
+      font-size: 14px;
+    }
+    .toc ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .chapter-subtitle {
+      font-style: italic;
+      color: #444;
+      margin-top: -0.2em;
+    }
+    .footnote {
+      font-size: 0.92em;
+      color: #444;
+      border-top: 1px solid #e3e3e3;
+      padding-top: 10px;
+    }
+    .image-caption {
+      font-style: italic;
+      color: #444;
+    }
+    .chapter-body p {
+      white-space: pre-wrap;
+      margin: 0 0 1em;
+    }
+"""
+
+
 def build_html(src, chapters, out_path):
     title = src.get("title", "Untitled")
     book_id = src.get("book_id", "")
@@ -365,7 +423,7 @@ def build_html(src, chapters, out_path):
 
         page_span = ""
         if ch["pages"]:
-            page_span = f"{min(ch['pages'])}–{max(ch['pages'])}"
+            page_span = f"{min(ch['pages'])}\u2013{max(ch['pages'])}"
 
         sections.append(f"""
 <section class="chapter" id="chapter-{idx}">
@@ -387,56 +445,7 @@ def build_html(src, chapters, out_path):
   <meta charset="utf-8">
   <title>{html.escape(title)}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {{
-      margin: 0;
-      padding: 24px;
-      background: #f5f5f5;
-      color: #111;
-      font: 18px/1.65 Georgia, "Times New Roman", serif;
-    }}
-    main {{
-      max-width: 900px;
-      margin: 0 auto;
-    }}
-    header, nav.toc, section.chapter {{
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-    }}
-    h1, h2 {{
-      margin-top: 0;
-    }}
-    .meta, .chapter-meta {{
-      color: #666;
-      font-size: 14px;
-    }}
-    .toc ol {{
-      margin: 0;
-      padding-left: 20px;
-    }}
-    .chapter-subtitle {{
-      font-style: italic;
-      color: #444;
-      margin-top: -0.2em;
-    }}
-    .footnote {{
-      font-size: 0.92em;
-      color: #444;
-      border-top: 1px solid #e3e3e3;
-      padding-top: 10px;
-    }}
-    .image-caption {{
-      font-style: italic;
-      color: #444;
-    }}
-    .chapter-body p {{
-      white-space: pre-wrap;
-      margin: 0 0 1em;
-    }}
-  </style>
+  <style>{_HTML_STYLE}  </style>
 </head>
 <body>
   <main>
@@ -477,8 +486,8 @@ def build_fb2(src, chapters, out_path):
     doc_info = ET.SubElement(desc, f"{{{NS_FB2}}}document-info")
     program = ET.SubElement(doc_info, f"{{{NS_FB2}}}program-used")
     program.text = "custom json->chapter fb2 converter"
-    date = ET.SubElement(doc_info, f"{{{NS_FB2}}}date")
-    date.text = src.get("generated_at", "")
+    date_el = ET.SubElement(doc_info, f"{{{NS_FB2}}}date")
+    date_el.text = src.get("generated_at", "")
 
     body = ET.SubElement(fb, f"{{{NS_FB2}}}body")
 
@@ -495,20 +504,21 @@ def build_fb2(src, chapters, out_path):
         sec_title_p.text = ch["title"]
 
         if ch["subtitle"]:
-            subtitle = ET.SubElement(sec, f"{{{NS_FB2}}}subtitle")
-            subtitle.text = ch["subtitle"]
+            ch_subtitle_el = ET.SubElement(sec, f"{{{NS_FB2}}}subtitle")
+            ch_subtitle_el.text = ch["subtitle"]
 
         for block in ch["content"]:
             text = block["text"]
             if not text:
                 continue
-
+            # Use <subtitle> for image captions, <p> for everything else.
+            # Use a local variable name to avoid shadowing ch_subtitle_el.
             if block["type"] == "image-caption":
-                subtitle = ET.SubElement(sec, f"{{{NS_FB2}}}subtitle")
-                subtitle.text = text
+                caption_el = ET.SubElement(sec, f"{{{NS_FB2}}}subtitle")
+                caption_el.text = text
             else:
-                p = ET.SubElement(sec, f"{{{NS_FB2}}}p")
-                p.text = text
+                p_el = ET.SubElement(sec, f"{{{NS_FB2}}}p")
+                p_el.text = text
 
     tree = ET.ElementTree(fb)
     tree.write(out_path, encoding="utf-8", xml_declaration=True)
@@ -636,7 +646,8 @@ p { margin: 0 0 0.8em; white-space: pre-wrap; }
 </container>
 """
 
-    with zipfile.ZipFile(out_path, "w") as zf:
+    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # mimetype MUST be first and stored (uncompressed) per EPUB spec
         zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
         zf.writestr("META-INF/container.xml", container_xml)
         zf.writestr("OEBPS/content.opf", content_opf)
