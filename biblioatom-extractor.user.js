@@ -311,6 +311,19 @@
     }, null, 2);
   }
 
+  function sanitizeHtml(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('script, iframe, object, embed, form, base').forEach(el => el.remove());
+    doc.querySelectorAll('*').forEach(el => {
+      Array.from(el.attributes).forEach(attr => {
+        if (attr.name.startsWith('on') || attr.value.trim().toLowerCase().includes('javascript:')) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    return doc.body.innerHTML;
+  }
+
   function buildHtmlDocument(items, meta) {
     const { title, bookId, from, to } = meta;
 
@@ -325,7 +338,9 @@
 
       let body = item.content || '';
 
-      if (!/<[a-z][\s\S]*>/i.test(body.trim())) {
+      if (/<[a-z][\s\S]*>/i.test(body.trim())) {
+        body = sanitizeHtml(body);
+      } else {
         body = `<pre>${escapeHtml(body)}</pre>`;
       }
 

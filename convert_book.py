@@ -164,7 +164,7 @@ def slugify(text):
     s = re.sub(r"[^\w\s.-]", "", s, flags=re.U)
     s = re.sub(r"\s+", "_", s)
     s = re.sub(r"_+", "_", s)
-    return s[:120] or "book"
+    return s.strip("_")[:120] or "book"
 
 
 def output_stem(src, input_path, prefix=""):
