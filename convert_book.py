@@ -114,7 +114,7 @@ def extract_blocks_from_html(pagehtml, fallback_text=""):
             attrs = m.group("attrs") or ""
             body = m.group("body") or ""
 
-            class_match = re.search(r'class=["\']([^"\']+)["\']', attrs, re.I)
+            class_match = re.search(r'class=["\'](["\']+)["\']', attrs, re.I)
             classes = class_match.group(1).split() if class_match else []
 
             text = strip_tags_preserve_text(body)
@@ -239,7 +239,7 @@ def is_probable_author_line(text):
     if len(words) > 6:
         return False
 
-    initials = sum(1 for w in words if re.match(r"^[А-ЯA-Z]\.?[А-ЯA-Z]?\.$ ", w))
+    initials = sum(1 for w in words if re.match(r"^[А-ЯA-Z]\.?[А-ЯA-Z]?\.$", w))
     surname_like = any(re.match(r"^[А-ЯA-ZЁ][а-яa-zё-]+$", w) for w in words)
 
     return initials >= 1 and surname_like
